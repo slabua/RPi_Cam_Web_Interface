@@ -55,6 +55,21 @@ case "$1" in
         echo "Removed everything"
         ;;
 
+  remove_lighttpd)
+        sudo killall raspimjpeg
+        sudo apt-get remove -y lighttpd php5 gpac motion
+        sudo apt-get autoremove -y
+
+        sudo rm -r /var/www/$rpicamdir/*
+        sudo rm /etc/sudoers.d/RPI_Cam_Web_Interface
+        sudo rm /usr/bin/raspimjpeg
+        sudo rm /etc/raspimjpeg
+        sudo cp -r /etc/rc.local.bak /etc/rc.local
+        sudo chmod 755 /etc/rc.local
+
+        echo "Removed everything"
+        ;;
+
   autostart_yes)
         sudo cp -r etc/rc_local_run/rc.local /etc/
         sudo chmod 755 /etc/rc.local
@@ -96,6 +111,72 @@ case "$1" in
         sudo chmod 644 /etc/apache2/sites-available/default
         sudo cp etc/apache2/conf.d/other-vhosts-access-log /etc/apache2/conf.d/other-vhosts-access-log
         sudo chmod 644 /etc/apache2/conf.d/other-vhosts-access-log
+
+        sudo cp etc/sudoers.d/RPI_Cam_Web_Interface /etc/sudoers.d/
+        sudo chmod 440 /etc/sudoers.d/RPI_Cam_Web_Interface
+
+        sudo cp -r bin/raspimjpeg /opt/vc/bin/
+        sudo chmod 755 /opt/vc/bin/raspimjpeg
+        if [ ! -e /usr/bin/raspimjpeg ]; then
+          sudo ln -s /opt/vc/bin/raspimjpeg /usr/bin/raspimjpeg
+        fi
+
+        if [ "$rpicamdir" == "" ]; then
+          cat etc/raspimjpeg/raspimjpeg.1 > etc/raspimjpeg/raspimjpeg
+        else
+          sed -e "s/www/www\/$rpicamdir/" etc/raspimjpeg/raspimjpeg.1 > etc/raspimjpeg/raspimjpeg
+        fi
+        sudo cp -r /etc/raspimjpeg /etc/raspimjpeg.bak
+        sudo cp -r etc/raspimjpeg/raspimjpeg /etc/
+        sudo chmod 644 /etc/raspimjpeg
+
+        if [ "$rpicamdir" == "" ]; then
+          cat etc/rc_local_run/rc.local.1 > etc/rc_local_run/rc.local
+        else
+          sed -e "s/www/www\/$rpicamdir/" etc/rc_local_run/rc.local.1 > etc/rc_local_run/rc.local
+        fi
+        sudo cp -r /etc/rc.local /etc/rc.local.bak
+        sudo cp -r etc/rc_local_run/rc.local /etc/
+        sudo chmod 755 /etc/rc.local
+
+        if [ "$rpicamdir" == "" ]; then
+          cat etc/motion/motion.conf.1 > etc/motion/motion.conf
+        else
+          sed -e "s/www/www\/$rpicamdir/" etc/motion/motion.conf.1 > etc/motion/motion.conf
+        fi
+        sudo cp -r etc/motion/motion.conf /etc/motion/
+        sudo chmod 640 /etc/motion/motion.conf
+
+        echo "Installer finished"
+        ;;
+
+  install_lighttpd)
+        sudo killall raspimjpeg
+        git pull origin master
+        sudo apt-get install -y lighttpd php5 gpac motion
+
+        sudo mkdir -p /var/www/$rpicamdir/media
+        sudo cp -r www/* /var/www/$rpicamdir/
+        if [ -e /var/www/$rpicamdir/index.html ]; then
+          sudo rm /var/www/$rpicamdir/index.html
+        fi
+        sudo chown -R www-data:www-data /var/www/$rpicamdir
+        if [ ! -e /var/www/$rpicamdir/FIFO ]; then
+          sudo mknod /var/www/$rpicamdir/FIFO p
+        fi
+        sudo chmod 666 /var/www/$rpicamdir/FIFO
+
+        if [ ! -e /var/www/$rpicamdir/cam.jpg ]; then
+          sudo ln -sf /run/shm/mjpeg/cam.jpg /var/www/$rpicamdir/cam.jpg
+        fi
+
+        ### >> ###############################################
+        #                                                    #
+        # TO DO:                                             #
+        # > This section is reserved to configure            #
+        #   password access to the stream path for lighttpd  #
+        #                                                    #
+        ### << ###############################################
 
         sudo cp etc/sudoers.d/RPI_Cam_Web_Interface /etc/sudoers.d/
         sudo chmod 440 /etc/sudoers.d/RPI_Cam_Web_Interface
