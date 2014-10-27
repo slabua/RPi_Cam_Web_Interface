@@ -28,7 +28,10 @@
 #
 # Edited by jfarcher to work with github
 # Edited by slabua to support custom installation folder
+# Edited by S0PH0S to enable support for nginx
 
+#Disable logging for nginx
+NGINX_DISABLE_LOGGING=false
 
 # Configure below the folder name where to install the software to,
 #  or leave empty to install to the root of the webserver.
@@ -37,8 +40,6 @@
 # Default upstream behaviour: rpicamdir="" (installs in /var/www/)
 rpicamdir=""
 
-
-NGINX_DISABLE_LOGGING=false
 
 case "$1" in
 
@@ -72,9 +73,9 @@ case "$1" in
         echo "Removed everything"
         ;;
 
-  remove_nginx}
+  remove_nginx)
         sudo killall raspimjpeg
-        sudo apt-get purge -y nginx php5 php5-fpm php5-common php-apc gpac motion
+        sudo apt-get remove -y nginx php5 php5-fpm php5-common php-apc gpac motion
         sudo apt-get autoremove -y
 
         sudo rm -r /var/www/$rpicamdir/*
@@ -234,10 +235,12 @@ case "$1" in
         ;;
 
   install_nginx)
+        # Update and ensure the program is not running and all prerequisites are installed
         sudo killall raspimjpeg
         git pull origin master
         sudo apt-get install -y nginx php5-fpm php5-common php-apc
 
+        # Move web interface code into place
         sudo mkdir -p /var/www/$rpicamdir/media
         sudo cp -r www/* /var/www/$rpicamdir/
         if [ -e /var/www/$rpicamdir/index.html ]; then
@@ -253,17 +256,19 @@ case "$1" in
           sudo ln -sf /run/shm/mjpeg/cam.jpg /var/www/$rpicamdir/cam.jpg
         fi
 
+        # Install nginx server file
         if [ "$rpicamdir" == "" ]; then
-          cat etc/nginx/sites-available/picamwebint.1 > etc/nginx/sites-available/picamwebint
+          cat etc/nginx/sites-available/rpicam.1 > etc/nginx/sites-available/rpicam
         else
-          sed -e "s/www/www\/$rpicamdir/" etc/nginx/sites-available/picamwebint.1 > etc/nginx/sites-available/picamwebint
+          sed -e "s:root /var/www;:root /var/www/$rpicamdir;:g" etc/nginx/sites-available/rpicam.1 > etc/nginx/sites-available/rpicam
         fi
-        sudo cp -r etc/nginx/sites-available/picamwebint /etc/nginx/sites-available/picamwebint
-        sudo chmod 644 /etc/nginx/sites-available/picamwebint
-        if [ ! -e /etc/nginx/sites-enabled/picamwebint ]; then
-          sudo ln -s /etc/nginx/sites-available/picamwebint /etc/nginx/sites-enabled/picamwebint
+        sudo cp -r etc/nginx/sites-available/rpicam /etc/nginx/sites-available/rpicam
+        sudo chmod 644 /etc/nginx/sites-available/rpicam
+        if [ ! -e /etc/nginx/sites-enabled/rpicam ]; then
+          sudo ln -s /etc/nginx/sites-available/rpicam /etc/nginx/sites-enabled/rpicam
         fi
 
+        # Update nginx main config file
         sudo sed -i "s/worker_processes 4;/worker_processes 2;/g" /etc/nginx/nginx.conf
         sudo sed -i "s/worker_connections 768;/worker_connections 128;/g" /etc/nginx/nginx.conf
         sudo sed -i "s/gzip on;/gzip off;/g" /etc/nginx/nginx.conf
@@ -271,6 +276,7 @@ case "$1" in
             sudo sed -i "s:access_log /var/log/nginx/nginx/access.log;:access_log /dev/null;:g" /etc/nginx/nginx.conf
         fi
 
+        # Configure php-apc
         sudo sh -c "echo \"cgi.fix_pathinfo = 0;\" >> /etc/php5/fpm/php.ini"
         sudo cp etc/php5/apc.ini /etc/php5/conf.d/20-apc.ini
         sudo chmod 644 /etc/php5/conf.d/20-apc.ini
