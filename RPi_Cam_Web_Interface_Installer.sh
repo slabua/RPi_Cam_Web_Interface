@@ -152,7 +152,7 @@ case "$1" in
 
   install_lighttpd)
         sudo killall raspimjpeg
-        git pull origin master
+        git pull origin lighttpd
         sudo apt-get install -y lighttpd php5 gpac motion
 
         sudo mkdir -p /var/www/$rpicamdir/media
