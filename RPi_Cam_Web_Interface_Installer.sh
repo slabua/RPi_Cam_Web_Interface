@@ -170,7 +170,7 @@ case "$1" in
 
   install_lighttpd)
         sudo killall raspimjpeg
-        git pull origin master
+        git pull origin lighttpd
         sudo apt-get install -y lighttpd php5 gpac motion
 
         sudo mkdir -p /var/www/$rpicamdir/media
@@ -237,7 +237,7 @@ case "$1" in
   install_nginx)
         # Update and ensure the program is not running and all prerequisites are installed
         sudo killall raspimjpeg
-        git pull origin master
+        git pull origin nginx
         sudo apt-get install -y nginx php5-fpm php5-common php-apc
 
         # Move web interface code into place
