@@ -8,7 +8,9 @@
    $options_mm = array('Average' => 'average', 'Spot' => 'spot', 'Backlit' => 'backlit', 'Matrix' => 'matrix');
    $options_em = array('Off' => 'off', 'Auto' => 'auto', 'Night' => 'night', 'Nightpreview' => 'nightpreview', 'Backlight' => 'backlight', 'Spotlight' => 'spotlight', 'Sports' => 'sports', 'Snow' => 'snow', 'Beach' => 'beach', 'Verylong' => 'verylong', 'Fixedfps' => 'fixedfps');
    $options_wb = array('Off' => 'off', 'Auto' => 'auto', 'Sun' => 'sun', 'Cloudy' => 'cloudy', 'Shade' => 'shade', 'Tungsten' => 'tungsten', 'Fluorescent' => 'fluorescent', 'Incandescent' => 'incandescent', 'Flash' => 'flash', 'Horizon' => 'horizon');
-   $options_ie = array('None' => 'none', 'Negative' => 'negative', 'Solarise' => 'solarise', 'Sketch' => 'sketch', 'Denoise' => 'denoise', 'Emboss' => 'emboss', 'Oilpaint' => 'oilpaint', 'Hatch' => 'hatch', 'Gpen' => 'gpen', 'Pastel' => 'pastel', 'Watercolour' => 'watercolour', 'Film' => 'film', 'Blur' => 'blur', 'Saturation' => 'saturation', 'Colourswap' => 'colourswap', 'Washedout' => 'washedout', 'Posterise' => 'posterise', 'Colourpoint' => 'colourpoint', 'ColourBalance' => 'colourbalance', 'Cartoon' => 'cartoon');
+//   $options_ie = array('None' => 'none', 'Negative' => 'negative', 'Solarise' => 'solarise', 'Sketch' => 'sketch', 'Denoise' => 'denoise', 'Emboss' => 'emboss', 'Oilpaint' => 'oilpaint', 'Hatch' => 'hatch', 'Gpen' => 'gpen', 'Pastel' => 'pastel', 'Watercolour' => 'watercolour', 'Film' => 'film', 'Blur' => 'blur', 'Saturation' => 'saturation', 'Colourswap' => 'colourswap', 'Washedout' => 'washedout', 'Posterise' => 'posterise', 'Colourpoint' => 'colourpoint', 'ColourBalance' => 'colourbalance', 'Cartoon' => 'cartoon');
+// Remove Colourpoint and colourbalance as they kill the camera
+   $options_ie = array('None' => 'none', 'Negative' => 'negative', 'Solarise' => 'solarise', 'Sketch' => 'sketch', 'Denoise' => 'denoise', 'Emboss' => 'emboss', 'Oilpaint' => 'oilpaint', 'Hatch' => 'hatch', 'Gpen' => 'gpen', 'Pastel' => 'pastel', 'Watercolour' => 'watercolour', 'Film' => 'film', 'Blur' => 'blur', 'Saturation' => 'saturation', 'Colourswap' => 'colourswap', 'Washedout' => 'washedout', 'Posterise' => 'posterise', 'Cartoon' => 'cartoon');
    $options_ce_en = array('Disabled' => '0', 'Enabled' => '1');
    $options_ro = array('No rotate' => '0', 'Rotate_90' => '90', 'Rotate_180' => '180', 'Rotate_270' => '270');
    $options_fl = array('None' => '0', 'Horizontal' => '1', 'Vertical' => '2', 'Both' => '3');
@@ -23,6 +25,7 @@
    $options_mx = array('Internal' => '0', 'External' => '1');
    $options_mf = array('Off' => '0', 'On' => '1');
    $options_cn = array('First' => '1', 'Second' => '2');
+   $options_st = array('Off' => '0', 'On' => '1');
    
    function initCamPos() {
       $tr = fopen("pipan_bak.txt", "r");
@@ -134,6 +137,14 @@
          return '';
    }
    
+   function getLoadClass() {
+      global $config;
+      if(array_key_exists('fullscreen', $config) && $config['fullscreen'] == 1)
+         return 'class="fullscreen" ';
+      else
+         return '';
+   }
+
    if (isset($_POST['extrastyle'])) {
       if (file_exists('css/' . $_POST['extrastyle'])) {
          $fp = fopen(BASE_DIR . '/css/extrastyle.txt', "w");
@@ -185,7 +196,7 @@
       </div>
       <input id="toggle_display" type="button" class="btn btn-primary" value="<?php echo $toggleButton; ?>" style="position:absolute;top:60px;right:10px;" onclick="set_display(this.value);">
       <div class="container-fluid text-center liveimage">
-         <div><img id="mjpeg_dest" <?php echo getImgWidth();?> <?php if(file_exists("pipan_on")) echo "ontouchstart=\"pipan_start()\""; ?> onclick="toggle_fullscreen(this);" src="./loading.jpg"></div>
+         <div><img id="mjpeg_dest" <?php echo getLoadClass() . getImgWidth();?> <?php if(file_exists("pipan_on")) echo "ontouchstart=\"pipan_start()\""; ?> onclick="toggle_fullscreen(this);" src="./loading.jpg"></div>
          <div id="main-buttons" <?php echo $displayStyle; ?> >
             <input id="video_button" type="button" class="btn btn-primary">
             <input id="image_button" type="button" class="btn btn-primary">
@@ -306,6 +317,10 @@
                            </td>
                         </tr>
                         <tr>
+                           <td>Image Statistics, default 'Off':</td>
+                           <td><select onchange="send_cmd('st ' + this.value)"><?php makeOptions($options_st, 'stat_pass'); ?></select></td>
+                        </tr>
+                        <tr>
                            <td>Rotation, default 0:</td>
                            <td><select onchange="send_cmd('ro ' + this.value)"><?php makeOptions($options_ro, 'rotation'); ?></select></td>
                         </tr>
@@ -325,13 +340,13 @@
                            </td>
                         </tr>
                         <tr>
-                           <td>Image quality (0...100), default 85:</td>
+                           <td>Image quality (0...100), default 10:</td>
                            <td>
                               <?php makeInput('image_quality', 4); ?><input type="button" value="OK" onclick="send_cmd('qu ' + document.getElementById('image_quality').value)">
                            </td>
                         </tr>
                         <tr>
-                           <td>Preview quality (0...100) Default 25:<br>Width (128...1024) Default 512:<br>Divider (1-16) Default 1:</td>
+                           <td>Preview quality (1...100) Default 10:<br>Width (128...1024) Default 512:<br>Divider (1-16) Default 1:</td>
                            <td>
                               Qu: <?php makeInput('quality', 4); ?>
                               Wi: <?php makeInput('width', 4); ?>
