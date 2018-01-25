@@ -51,6 +51,8 @@ color_reset="tput sgr0"
 versionfile="./www/config.php"
 version=$(cat $versionfile | grep "'APP_VERSION'" | cut -d "'" -f4)
 backtitle="Copyright (c) 2015, Bob Tidey. RPi Cam $version"
+jpglink="no"
+phpversion=7
 
 # Config options located in ./config.txt. In first run script makes that file for you.
 if [ ! -e ./config.txt ]; then
@@ -61,6 +63,8 @@ if [ ! -e ./config.txt ]; then
       sudo echo "user=\"\"" >> ./config.txt
       sudo echo "webpasswd=\"\"" >> ./config.txt
       sudo echo "autostart=\"yes\"" >> ./config.txt
+      sudo echo "jpglink=\"no\"" >> ./config.txt
+      sudo echo "phpversion=\"7\"" >> ./config.txt
       sudo echo "" >> ./config.txt
       sudo chmod 664 ./config.txt
 fi
@@ -84,10 +88,12 @@ if [ $# -eq 0 ] || [ "$1" != "q" ]; then
    0 0 0                                          \
    "Cam subfolder:"        1 1   "$rpicamdir"   1 32 15 0  \
    "Autostart:(yes/no)"    2 1   "$autostart"   2 32 15 0  \
-   "Server:(apache/nginx)" 3 1   "$webserver"   3 32 15 0  \
+   "Server:(apache/nginx/lighttpd)" 3 1   "$webserver"   3 32 15 0  \
    "Webport:"              4 1   "$webport"     4 32 15 0  \
    "User:(blank=nologin)"  5 1   "$user"        5 32 15 0  \
    "Password:"             6 1   "$webpasswd"   6 32 15 0  \
+   "jpglink:(yes/no)"      7 1   "$jpglink"     7 32 15 0  \
+   "phpversion:(5/7)"      8 1   "$phpversion"  8 32 15 0  \
    2>&1 1>&3 | {
       read -r rpicamdir
       read -r autostart
@@ -95,6 +101,8 @@ if [ $# -eq 0 ] || [ "$1" != "q" ]; then
       read -r webport
       read -r user
       read -r webpasswd
+	  read -r jpglink
+	  read -r phpversion
    if [ -n "$webport" ]; then
       sudo echo "#This is edited config file for main installer. Put any extra options in here." > ./config.txt
       sudo echo "rpicamdir=\"$rpicamdir\"" >> ./config.txt
@@ -103,6 +111,8 @@ if [ $# -eq 0 ] || [ "$1" != "q" ]; then
       sudo echo "user=\"$user\"" >> ./config.txt
       sudo echo "webpasswd=\"$webpasswd\"" >> ./config.txt
       sudo echo "autostart=\"$autostart\"" >> ./config.txt
+      sudo echo "jpglink=\"$jpglink\"" >> ./config.txt
+      sudo echo "phpversion=\"$phpversion\"" >> ./config.txt
       sudo echo "" >> ./config.txt
    else
       echo "exit" > ./exitfile.txt
@@ -119,17 +129,17 @@ if [ $# -eq 0 ] || [ "$1" != "q" ]; then
 fi
 
 if [ ! "${rpicamdir:0:1}" == "" ]; then
-   rpicamdirEsc="\\/$rpicamdir"
    rpicamdir=/$rpicamdir
+   rpicamdirEsc=${rpicamdir//\//\\\/}
 else
    rpicamdirEsc=""
 fi
 
 fn_stop ()
 { # This is function stop
-        sudo killall raspimjpeg
-        sudo killall php
-        sudo killall motion
+        sudo killall raspimjpeg 2>/dev/null
+        sudo killall php 2>/dev/null
+        sudo killall motion 2>/dev/null
 }
 
 fn_reboot ()
@@ -164,7 +174,7 @@ sudo sed -i "s/<Directory\ \/var\/www\/.*/<Directory\ \/var\/www$rpicamdirEsc>/g
 if [ "$user" == "" ]; then
 	sudo sed -i "s/AllowOverride\ .*/AllowOverride None/g" $aconf
 else
-   sudo htpasswd -b -c /usr/local/.htpasswd $user $webpasswd
+   sudo htpasswd -b -B -c /usr/local/.htpasswd $user $webpasswd
 	sudo sed -i "s/AllowOverride\ .*/AllowOverride All/g" $aconf
    if [ ! -e /var/www$rpicamdir/.htaccess ]; then
       sudo bash -c "cat > /var/www$rpicamdir/.htaccess" << EOF
@@ -200,9 +210,12 @@ if [ "$user" == "" ]; then
    sed -i "s/auth_basic\ .*/auth_basic \"Off\";/g" $aconf
    sed -i "s/\ auth_basic_user_file/#auth_basic_user_file/g" $aconf
 else
-   sudo htpasswd -b -c /usr/local/.htpasswd $user $webpasswd
+   sudo htpasswd -b -B -c /usr/local/.htpasswd $user $webpasswd
    sed -i "s/auth_basic\ .*/auth_basic \"Restricted\";/g" $aconf
    sed -i "s/#auth_basic_user_file/\ auth_basic_user_file/g" $aconf
+fi
+if [[ "$phpversion" == "7" ]]; then
+   sed -i "s/\/var\/run\/php5-fpm\.sock;/\/run\/php\/php7.0-fpm\.sock;/g" $aconf
 fi
 sudo mv $aconf /$aconf
 sudo chmod 644 /$aconf
@@ -219,17 +232,33 @@ if [ "$NGINX_DISABLE_LOGGING" != "" ]; then
 fi
 
 # Configure php-apc
-sudo sh -c "echo \"cgi.fix_pathinfo = 0;\" >> /etc/php5/fpm/php.ini"
-sudo mkdir /etc/php5/conf.d >/dev/null 2>&1
-sudo cp etc/php5/apc.ini /etc/php5/conf.d/20-apc.ini
-sudo chmod 644 /etc/php5/conf.d/20-apc.ini
+if [[ "$phpversion" == "7" ]]; then
+	phpnv=/etc/php/7.0
+else
+	phpnv=/etc/php5
+fi
+sudo sh -c "echo \"cgi.fix_pathinfo = 0;\" >> $phpnv/fpm/php.ini"
+sudo mkdir $phpnv/conf.d >/dev/null 2>&1
+sudo cp etc/php5/apc.ini $phpnv/conf.d/20-apc.ini
+sudo chmod 644 $phpnv/conf.d/20-apc.ini
 sudo service nginx restart
 }
 
+fn_lighttpd ()
+{
+sudo lighty-enable-mod fastcgi-php
+sudo sed -i "s/^server.document-root.*/server.document-root  = \"\/var\/www$rpicamdirEsc\"/g" /etc/lighttpd/lighttpd.conf
+sudo sed -i "s/^server.port.*/server.port  = $webport/g" /etc/lighttpd/lighttpd.conf
+#sudo service lighttpd restart  
+sudo /etc/init.d/lighttpd force-reload
+ }
+
 fn_motion ()
 {
+sudo sed -i "s/^daemon.*/daemon on/g" /etc/motion/motion.conf		
+sudo sed -i "s/^logfile.*/;logfile \/tmp\/motion.log /g" /etc/motion/motion.conf		
 sudo sed -i "s/^; netcam_url.*/netcam_url/g" /etc/motion/motion.conf		
-sudo sed -i "s/^netcam_url.*/netcam_url http:\/\/localhost$rpicamdirEsc\/cam_pic.php/g" /etc/motion/motion.conf		
+sudo sed -i "s/^netcam_url.*/netcam_url http:\/\/localhost:$webport$rpicamdirEsc\/cam_pic.php/g" /etc/motion/motion.conf		
 if [ "$user" == "" ]; then
    sudo sed -i "s/^netcam_userpass.*/; netcam_userpass value/g" /etc/motion/motion.conf		
 else
@@ -237,9 +266,9 @@ else
    sudo sed -i "s/^netcam_userpass.*/netcam_userpass $user:$webpasswd/g" /etc/motion/motion.conf		
 fi
 sudo sed -i "s/^; on_event_start.*/on_event_start/g" /etc/motion/motion.conf		
-sudo sed -i "s/^on_event_start.*/on_event_start echo -n \'1\' >\/var\/www\/FIFO1/g" /etc/motion/motion.conf		
+sudo sed -i "s/^on_event_start.*/on_event_start echo -n \'1\' >\/var\/www$rpicamdirEsc\/FIFO1/g" /etc/motion/motion.conf		
 sudo sed -i "s/^; on_event_end.*/on_event_end/g" /etc/motion/motion.conf		
-sudo sed -i "s/^on_event_end.*/on_event_end echo -n \'0\' >\/var\/www\/FIFO1/g" /etc/motion/motion.conf		
+sudo sed -i "s/^on_event_end.*/on_event_end echo -n \'0\' >\/var\/www$rpicamdirEsc\/FIFO1/g" /etc/motion/motion.conf		
 sudo sed -i "s/control_port.*/control_port 6642/g" /etc/motion/motion.conf		
 sudo sed -i "s/control_html_output.*/control_html_output off/g" /etc/motion/motion.conf		
 sudo sed -i "s/^output_pictures.*/output_pictures off/g" /etc/motion/motion.conf		
@@ -250,7 +279,6 @@ sudo sed -i "s/^webcam_port.*/webcam_port 0/g" /etc/motion/motion.conf
 sudo sed -i "s/^process_id_file/; process_id_file/g" /etc/motion/motion.conf
 sudo sed -i "s/^videodevice/; videodevice/g" /etc/motion/motion.conf
 sudo sed -i "s/^event_gap 60/event_gap 3/g" /etc/motion/motion.conf
-sudo sed -i "s/www/www$rpicamdirEsc/" /etc/motion/motion.conf
 sudo chown motion:www-data /etc/motion/motion.conf
 sudo chmod 664 /etc/motion/motion.conf
 }
@@ -307,12 +335,21 @@ if [ -e /var/www$rpicamdir/index.html ]; then
    sudo rm /var/www$rpicamdir/index.html
 fi
 
-if [ "$webserver" == "apache" ]; then
-   sudo apt-get install -y apache2 php5 php5-cli libapache2-mod-php5 gpac motion zip libav-tools
-   fn_apache
+if [[ "$phpversion" == "7" ]]; then
+   phpv=php7.0
 else
-   sudo apt-get install -y nginx php5-fpm php5-cli php5-common php-apc apache2-utils gpac motion zip libav-tools
+   phpv=php5
+fi
+
+if [ "$webserver" == "apache" ]; then
+   sudo apt-get install -y apache2 $phpv $phpv-cli libapache2-mod-$phpv gpac motion zip libav-tools gstreamer1.0-tools
+   fn_apache
+elif [ "$webserver" == "nginx" ]; then
+   sudo apt-get install -y nginx $phpv-fpm $phpv-cli $phpv-common php-apcu apache2-utils gpac motion zip libav-tools gstreamer1.0-tools
    fn_nginx
+elif [ "$webserver" == "lighttpd" ]; then
+   sudo apt-get install -y  lighttpd $phpv-cli $phpv-common $phpv-cgi $phpv gpac motion zip libav-tools gstreamer1.0-tools
+   fn_lighttpd
 fi
 
 #Make sure user www-data has bash shell
@@ -323,24 +360,35 @@ if [ ! -e /var/www$rpicamdir/FIFO ]; then
 fi
 sudo chmod 666 /var/www$rpicamdir/FIFO
 
+if [ ! -e /var/www$rpicamdir/FIFO11 ]; then
+   sudo mknod /var/www$rpicamdir/FIFO11 p
+fi
+sudo chmod 666 /var/www$rpicamdir/FIFO11
+
 if [ ! -e /var/www$rpicamdir/FIFO1 ]; then
    sudo mknod /var/www$rpicamdir/FIFO1 p
 fi
-sudo chmod 666 /var/www$rpicamdir/FIFO1
-sudo chmod 755 /var/www$rpicamdir/raspizip.sh
 
-if [ ! -e /var/www$rpicamdir/cam.jpg ]; then
-   sudo ln -sf /run/shm/mjpeg/cam.jpg /var/www$rpicamdir/cam.jpg
+sudo chmod 666 /var/www$rpicamdir/FIFO1
+
+if [ ! -d /dev/shm/mjpeg ]; then
+   mkdir /dev/shm/mjpeg
+fi
+
+if [ "$jpglink" == "yes" ]; then
+	if [ ! -e /var/www$rpicamdir/cam.jpg ]; then
+	   sudo ln -sf /dev/shm/mjpeg/cam.jpg /var/www$rpicamdir/cam.jpg
+	fi
 fi
 
 if [ -e /var/www$rpicamdir/status_mjpeg.txt ]; then
    sudo rm /var/www$rpicamdir/status_mjpeg.txt
 fi
-if [ ! -e /run/shm/mjpeg/status_mjpeg.txt ]; then
-   echo -n 'halted' > /run/shm/mjpeg/status_mjpeg.txt
+if [ ! -e /dev/shm/mjpeg/status_mjpeg.txt ]; then
+   echo -n 'halted' > /dev/shm/mjpeg/status_mjpeg.txt
 fi
-sudo chown www-data:www-data /run/shm/mjpeg/status_mjpeg.txt
-sudo ln -sf /run/shm/mjpeg/status_mjpeg.txt /var/www$rpicamdir/status_mjpeg.txt
+sudo chown www-data:www-data /dev/shm/mjpeg/status_mjpeg.txt
+sudo ln -sf /dev/shm/mjpeg/status_mjpeg.txt /var/www$rpicamdir/status_mjpeg.txt
 
 sudo chown -R www-data:www-data /var/www$rpicamdir
 sudo cp etc/sudoers.d/RPI_Cam_Web_Interface /etc/sudoers.d/
@@ -353,7 +401,7 @@ if [ ! -e /usr/bin/raspimjpeg ]; then
 fi
 
 sed -e "s/www/www$rpicamdirEsc/" etc/raspimjpeg/raspimjpeg.1 > etc/raspimjpeg/raspimjpeg
-if [ `cat /proc/cmdline |awk -v RS=' ' -F= '/boardrev/ { print $2 }'` == "0x11" ]; then
+if [[ `cat /proc/cmdline |awk -v RS=' ' -F= '/boardrev/ { print $2 }'` == "0x11" ]]; then
    sed -i 's/^camera_num 0/camera_num 1/g' etc/raspimjpeg/raspimjpeg
 fi
 if [ -e /etc/raspimjpeg ]; then

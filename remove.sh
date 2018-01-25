@@ -48,11 +48,12 @@ source ./config.txt
 
 fn_stop ()
 { # This is function stop
-        sudo killall raspimjpeg
-        sudo killall php
-        sudo killall motion
+        sudo killall raspimjpeg 2>/dev/null
+        sudo killall php 2>/dev/null
+        sudo killall motion 2>/dev/null
         sudo service apache2 stop >dev/null 2>&1
         sudo service nginx stop >dev/null 2>&1
+        sudo service lighttpd stop >dev/null 2>&1
         dialog --title 'Stop message' --infobox 'Stopped.' 4 16 ; sleep 2
 }
 
@@ -97,7 +98,7 @@ fn_stop
 dialog --title "Uninstall packages!" --backtitle "$backtitle" --yesno "Do You want uninstall webserver and php packages also?" 6 35
 response=$?
 case $response in
-   0) package=('apache2' 'php5' 'libapache2-mod-php5' 'php5-cli' 'zip' 'nginx' 'apache2-utils' 'php5-fpm' 'php5-common' 'php-apc' 'gpac motion' 'libav-tools');; 
+   0) package=('apache2' 'php5' 'libapache2-mod-php5' 'php5-cli' 'zip' 'nginx' 'lighttpd ''apache2-utils' 'php5-fpm' 'php5-common' 'php-apc' 'gpac motion' 'libav-tools');; 
    1) package=('zip' 'gpac motion' 'libav-tools');; 
    255) dialog --title 'Uninstall message' --infobox 'Webserver and php packages not uninstalled.' 4 33 ; sleep 2;;
 esac

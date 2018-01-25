@@ -23,22 +23,20 @@ function toggle_fullscreen(e) {
 }
 
 function set_display(value) {
-   var show_hide;
    var d = new Date();
+   var val;
    d.setTime(d.getTime() + (365*24*60*60*1000));
    var expires = "expires="+d.toUTCString();
-   
-   if (value == "Simple") {
-      show_hide = "none";
-      document.getElementById("toggle_display").value = "Full";
+   if (value == "SimpleOff") {
+	   val = "Off";
+   } else if (value == "SimpleOn") {
+	   val = "Full";
    } else {
-      show_hide = "block";
-      document.getElementById("toggle_display").value = "Simple";
+	   val = value
    }
-   document.getElementById("main-buttons").style.display = show_hide;
-   document.getElementById("secondary-buttons").style.display = show_hide;
-   document.getElementById("accordion").style.display = show_hide;
-   document.cookie="display_mode=" + value + "; " + expires;
+   
+   document.cookie="display_mode=" + val + "; " + expires;
+   document.location.reload(true);
 }
 
 function set_stream_mode(value) {
@@ -118,6 +116,14 @@ function set_ac() {
 
 function set_ag() {
   send_cmd("ag " + document.getElementById("ag_r").value + " " + document.getElementById("ag_b").value);
+}
+
+function send_macroUpdate(i, macro) {
+  var macrovalue = document.getElementById(macro).value;
+  if(!document.getElementById(macro + "_chk").checked) {
+	  macrovalue = "-" + macrovalue;
+  }
+  send_cmd("um " + i + " " + macrovalue);
 }
 
 //
@@ -326,9 +332,9 @@ ajax_status.onreadystatechange = function() {
       document.getElementById("preview_select").disabled = false;
     }
     else if(ajax_status.responseText == "tl_md_video") {
-      document.getElementById("video_button").disabled = true;
+      document.getElementById("video_button").disabled = false;
       document.getElementById("video_button").value = "record video stop";
-      document.getElementById("video_button").onclick = function() {};
+      document.getElementById("video_button").onclick = function() {send_cmd("ca 0");};
       document.getElementById("image_button").disabled = true;
       document.getElementById("image_button").value = "record image";
       document.getElementById("image_button").onclick = function() {};
@@ -393,47 +399,6 @@ function reload_ajax (last) {
   ajax_status.send();
 }
 
-function get_zip_progress(zipname) {
-   var ajax_zip;
-   if(window.XMLHttpRequest) {
-      ajax_zip = new XMLHttpRequest();
-   }
-   else {
-      ajax_zip = new ActiveXObject("Microsoft.XMLHTTP");
-   }
-   
-   ajax_zip.onreadystatechange = function() {
-      if(ajax_zip.readyState == 4 && ajax_zip.status == 200) {
-         if (process_zip_progress(ajax_zip.responseText)) {
-            setTimeout(function() { get_zip_progress(zipname); }, 1000);
-         }
-         else {
-            document.getElementById("zipdownload").value=zipname;
-            document.getElementById("zipform").submit();
-            document.getElementById("progress").style.display = "none";
-         }
-      }
-   }
-   ajax_zip.open("GET","preview.php?zipprogress=" + zipname);
-   ajax_zip.send();
-}
-
-function process_zip_progress(str) {
-   var arr = str.split("/");
-   if (arr.length == 2) {
-     var count = parseInt(arr[0]);
-     var total = parseInt(arr[1]);
-     var progress = document.getElementById("progress");
-     //progress.style.display = "block";
-     var caption = " ";
-     if (count > 0) caption = str;
-     progress.innerHTML=caption + "<div style=\"width:" + (count/total)*100 + "%;background-color:#0f0;\">&nbsp;</div>";
-     return true;
-   }
-   else {
-      return false;
-   }
-}
 //
 // Ajax Commands
 //

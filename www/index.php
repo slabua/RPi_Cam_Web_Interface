@@ -4,7 +4,7 @@
    require_once(BASE_DIR.'/config.php');
    $config = array();
    $debugString = "";
-   
+   $macros = array('error_soft','error_hard','start_img','end_img','start_vid','end_vid','end_box','do_cmd','motion_event','startstop');
    $options_mm = array('Average' => 'average', 'Spot' => 'spot', 'Backlit' => 'backlit', 'Matrix' => 'matrix');
    $options_em = array('Off' => 'off', 'Auto' => 'auto', 'Night' => 'night', 'Nightpreview' => 'nightpreview', 'Backlight' => 'backlight', 'Spotlight' => 'spotlight', 'Sports' => 'sports', 'Snow' => 'snow', 'Beach' => 'beach', 'Verylong' => 'verylong', 'Fixedfps' => 'fixedfps');
    $options_wb = array('Off' => 'off', 'Auto' => 'auto', 'Sun' => 'sun', 'Cloudy' => 'cloudy', 'Shade' => 'shade', 'Tungsten' => 'tungsten', 'Fluorescent' => 'fluorescent', 'Incandescent' => 'incandescent', 'Flash' => 'flash', 'Horizon' => 'horizon');
@@ -22,7 +22,7 @@
    $options_vs = array('Off' => '0', 'On' => '1');
    $options_rl = array('Off' => '0', 'On' => '1');
    $options_vp = array('Off' => '0', 'On' => '1');
-   $options_mx = array('Internal' => '0', 'External' => '1');
+   $options_mx = array('Internal' => '0', 'External' => '1', 'Monitor' => '2');
    $options_mf = array('Off' => '0', 'On' => '1');
    $options_cn = array('First' => '1', 'Second' => '2');
    $options_st = array('Off' => '0', 'On' => '1');
@@ -36,6 +36,30 @@
          }
          fclose($tr);
       }
+   }
+
+   function user_buttons() {
+      $buttonString = "";
+	  $buttonCount = 0;
+      if (file_exists("userbuttons")) {
+		$lines = array();
+		$data = file_get_contents("userbuttons");
+		$lines = explode("\n", $data);
+		foreach($lines as $line) {
+			if (strlen($line) && (substr($line, 0, 1) != '#') && buttonCount < 6) {
+				$index = strpos($line, ',');
+				if ($index !== false) {
+					$buttonName = substr($line, 0, $index);
+					$macroName = substr($line, $index +1);
+					$buttonString .= '<input id="' . $buttonName . '" type="button" value="' . $buttonName . '" onclick="send_cmd(' . "'sy " . $macroName . "'" . ')" class="btn btn-primary" >' . "\r\n";
+					$buttonCount += 1;
+				}
+			}
+		}
+      }
+	  if (strlen($buttonString)) {
+		  echo '<div class="container-fluid text-center">' . $buttonString . "</div>\r\n";
+	  }
    }
 
    function pan_controls() {
@@ -129,6 +153,26 @@
       echo "<input type='text' size=$size id='$id' value='$value'>";
    }
    
+   function macroUpdates() {
+      global $config, $debugString, $macros;
+	  $m = 0;
+	  $mTable = '';
+	  foreach($macros as $macro) {
+		  $value = $config[$macro];
+		  if(substr($value,0,1) == '-') {
+			  $checked = '';
+			  $value = substr($value,1);
+		  } else {
+			  $checked = 'checked';
+		  }
+		  $mTable .= "<TR><TD>Macro:$macro</TD><TD><input type='text' size=16 id='$macro' value='$value'>\r\n";
+		  $mTable .= "<input type='checkbox' $checked id='$macro" . "_chk'>\r\n";
+		  $mTable .= "<input type='button' value='OK' onclick=" . '"send_macroUpdate' . "($m,'$macro')\r\n" . ';"></TD></TR>';
+		  $m++;
+	  }
+      echo $mTable;
+   }
+
    function getImgWidth() {
       global $config;
       if($config['vector_preview'])
@@ -145,6 +189,13 @@
          return '';
    }
 
+   function simple_button() {
+	   global $toggleButton, $userLevel;
+	   if ($toggleButton != "Off" && $userLevel > USERLEVEL_MIN) {
+		  echo '<input id="toggle_display" type="button" class="btn btn-primary" value="' . $toggleButton . '" style="position:absolute;top:60px;right:10px;" onclick="set_display(this.value);">';
+	   }
+   }
+
    if (isset($_POST['extrastyle'])) {
       if (file_exists('css/' . $_POST['extrastyle'])) {
          $fp = fopen(BASE_DIR . '/css/extrastyle.txt', "w");
@@ -152,16 +203,48 @@
          fclose($fp);
       }
    }
-   
-   $toggleButton = "Simple";
-   $displayStyle = 'style="display:block;"';
-   if(isset($_COOKIE["display_mode"])) {
-      if($_COOKIE["display_mode"] == "Simple") {
-         $toggleButton = "Full";
-         $displayStyle = 'style="display:none;"';
-      }
+
+   function getDisplayStyle($context, $userLevel) {
+	    global $Simple;
+	    if ($Simple == 1) {
+			echo 'style="display:none;"';
+		} else {
+			switch($context) {
+				case 'navbar':
+					if ($userLevel == USERLEVEL_MIN)
+						echo 'style="display:none;"';
+					break;
+				case 'actions':
+					if ($userLevel == USERLEVEL_MIN)
+						echo 'style="display:none;"';
+					break;
+				case 'settings':
+					if ((int)$userLevel != USERLEVEL_MAX)
+						echo 'style="display:none;"';
+					break;
+			}
+		}
    }
-   
+
+   $toggleButton = "Off";
+   $Simple = 0;
+   $allowSimple = "SimpleOn";
+   if(isset($_COOKIE["display_mode"])) {
+      if($_COOKIE["display_mode"] == "Full") {
+		 $allowSimple = "SimpleOff";
+         $toggleButton = "Simple";
+         $Simple = 2;
+      } else if($_COOKIE["display_mode"] == "Simple") {
+		 $allowSimple = "SimpleOff";
+         $toggleButton = "Full";
+         $Simple = 1;
+      } else {
+		 $allowSimple = "SimpleOn";
+         $toggleButton = "Off";
+         $Simple = 0;
+	  }
+   }
+  
    $streamButton = "MJPEG-Stream";
    $mjpegmode = 0;
    if(isset($_COOKIE["stream_mode"])) {
@@ -174,6 +257,21 @@
    $config = readConfig($config, CONFIG_FILE2);
    $video_fps = $config['video_fps'];
    $divider = $config['divider'];
+   $serverSoftware = $_SERVER['SERVER_SOFTWARE'];
+   if(stripos($serverSoftware, 'apache') !== false) {
+	   $user = apache_getenv("REMOTE_USER"); 
+   } else if(stripos($serverSoftware, 'nginx') !== false) {
+	   try {
+		   $user = $remote_user;
+	   } catch  (Exception $e) {
+		$user = '';
+	   }
+   } else {
+	   $user = '';
+   }
+   writeLog("Logged in user:" . $user . ":");
+   $userLevel =  getUserLevel($user);
+   writeLog("UserLevel " . $userLevel);
   ?>
 
 <html>
@@ -187,34 +285,36 @@
       <script src="js/pipan.js"></script>
    </head>
    <body onload="setTimeout('init(<?php echo "$mjpegmode, $video_fps, $divider" ?>);', 100);">
-      <div class="navbar navbar-inverse navbar-fixed-top" role="navigation" <?php echo $displayStyle; ?>>
+      <div class="navbar navbar-inverse navbar-fixed-top" role="navigation" <?php getdisplayStyle('navbar', $userLevel); ?>>
          <div class="container">
             <div class="navbar-header">
                <a class="navbar-brand" href="#"><?php echo CAM_STRING; ?></a>
             </div>
          </div>
       </div>
-      <input id="toggle_display" type="button" class="btn btn-primary" value="<?php echo $toggleButton; ?>" style="position:absolute;top:60px;right:10px;" onclick="set_display(this.value);">
+	  <?php simple_button(); ?>
       <div class="container-fluid text-center liveimage">
-         <div><img id="mjpeg_dest" <?php echo getLoadClass() . getImgWidth();?> <?php if(file_exists("pipan_on")) echo "ontouchstart=\"pipan_start()\""; ?> onclick="toggle_fullscreen(this);" src="./loading.jpg"></div>
-         <div id="main-buttons" <?php echo $displayStyle; ?> >
-            <input id="video_button" type="button" class="btn btn-primary">
-            <input id="image_button" type="button" class="btn btn-primary">
-            <input id="timelapse_button" type="button" class="btn btn-primary">
-            <input id="md_button" type="button" class="btn btn-primary">
-            <input id="halt_button" type="button" class="btn btn-danger">
+         <div><img id="mjpeg_dest" <?php echo getLoadClass() . getImgWidth();?>
+		 <?php if(file_exists("pipan_on")) echo "ontouchstart=\"pipan_start()\""; ?> onclick="toggle_fullscreen(this);" src="./loading.jpg"></div>
+         <div id="main-buttons">
+            <input id="video_button" type="button" class="btn btn-primary" <?php getdisplayStyle('actions', $userLevel); ?>>
+            <input id="image_button" type="button" class="btn btn-primary" <?php getdisplayStyle('actions', $userLevel); ?>>
+            <input id="timelapse_button" type="button" class="btn btn-primary" <?php getdisplayStyle('actions', $userLevel); ?>>
+            <input id="md_button" type="button" class="btn btn-primary" <?php getdisplayStyle('settings', $userLevel); ?>>
+            <input id="halt_button" type="button" class="btn btn-danger" <?php getdisplayStyle('settings', $userLevel); ?>>
          </div>
       </div>
-      <div id="secondary-buttons" class="container-fluid text-center" <?php echo $displayStyle; ?> >
+      <div id="secondary-buttons" class="container-fluid text-center">
          <?php pan_controls(); ?>
-         <a href="preview.php" class="btn btn-default">Download Videos and Images</a>
+         <?php user_buttons(); ?>
+         <a href="preview.php" class="btn btn-default" <?php getdisplayStyle('actions', $userLevel); ?>>Download Videos and Images</a>
          &nbsp;&nbsp;
-         <?php  if($config['motion_external']): ?><a href="motion.php" class="btn btn-default">Edit motion settings</a>&nbsp;&nbsp;<?php endif; ?>
-         <a href="schedule.php" class="btn btn-default">Edit schedule settings</a>
+         <?php  if($config['motion_external'] == '1'): ?><a href="motion.php" class="btn btn-default" <?php getdisplayStyle('settings', $userLevel); ?>>Edit motion settings</a>&nbsp;&nbsp;<?php endif; ?>
+         <a href="schedule.php" class="btn btn-default" <?php getdisplayStyle('settings', $userLevel); ?>>Edit schedule settings</a>
       </div>
     
       <div class="container-fluid text-center">
-         <div class="panel-group" id="accordion" <?php echo $displayStyle; ?> >
+         <div class="panel-group" id="accordion" <?php getdisplayStyle('settings', $userLevel); ?> >
             <div class="panel panel-default">
                <div class="panel-heading">
                   <h2 class="panel-title">
@@ -227,12 +327,14 @@
                         <tr>
                            <td>Resolutions:</td>
                            <td>Load Preset: <select onchange="set_preset(this.value)">
+								<?php if(!file_exists('uPresets.html')) : ?>
                                  <option value="1920 1080 25 25 2592 1944">Select option...</option>
                                  <option value="1920 1080 25 25 2592 1944">Full HD 1080p 16:9</option>
                                  <option value="1280 0720 25 25 2592 1944">HD-ready 720p 16:9</option>
                                  <option value="1296 972 25 25 2592 1944">Max View 972p 4:3</option>
                                  <option value="768 576 25 25 2592 1944">SD TV 576p 4:3</option>
                                  <option value="1920 1080 01 30 2592 1944">Full HD Timelapse (x30) 1080p 16:9</option>
+								 <?php else : include 'uPresets.html'; endif; ?>
                               </select><br>
                               Custom Values:<br>
                               Video res: <?php makeInput('video_width', 4); ?>x<?php makeInput('video_height', 4); ?>px<br>
@@ -254,12 +356,37 @@
                            <td><?php makeInput('tl_interval', 4); ?>s <input type="button" value="OK" onclick="send_cmd('tv ' + 10 * document.getElementById('tl_interval').value)"></td>
                         </tr>
                         <tr>
+                           <td>Video Split (seconds, default 0=off):</td>
+                           <td><?php makeInput('video_split', 6); ?>s <input type="button" value="OK" onclick="send_cmd('vi ' + document.getElementById('video_split').value)"></td>
+                        </tr>
+                        <tr>
                            <td>Annotation (max 127 characters):</td>
                            <td>
                               Text: <?php makeInput('annotation', 20); ?><input type="button" value="OK" onclick="send_cmd('an ' + encodeURI(document.getElementById('annotation').value))"><input type="button" value="Default" onclick="document.getElementById('annotation').value = 'RPi Cam %Y.%M.%D_%h:%m:%s'; send_cmd('an ' + encodeURI(document.getElementById('annotation').value))"><br>
                               Background: <select onchange="send_cmd('ab ' + this.value)"><?php makeOptions($options_ab, 'anno_background'); ?></select>
                            </td>
                         </tr>
+                        <tr>
+                           <td>Annotation size(0-99):</td>
+                           <td>
+                              <?php makeInput('anno_text_size', 3); ?><input type="button" value="OK" onclick="send_cmd('as ' + document.getElementById('anno_text_size').value)">
+                           </td>
+                        </tr>
+                        <tr>
+                           <td>Custom text color:</td>
+                           <td><select id="at_en"><?php makeOptions($options_at_en, 'anno3_custom_text_colour'); ?></select>
+                              y:u:v = <?php makeInput('at_y', 3, 'anno3_custom_text_Y'); ?>:<?php makeInput('at_u', 4, 'anno3_custom_text_U'); ?>:<?php makeInput('at_v', 4, 'anno3_custom_text_V'); ?>
+                              <input type="button" value="OK" onclick="set_at();">
+                           </td>
+                        </tr>
+                        <tr>
+                           <td>Custom background color:</td>
+                           <td><select id="ac_en"><?php makeOptions($options_ac_en, 'anno3_custom_background_colour'); ?></select>
+                              y:u:v = <?php makeInput('ac_y', 3, 'anno3_custom_background_Y'); ?>:<?php makeInput('ac_u', 4, 'anno3_custom_background_U'); ?>:<?php makeInput('ac_v', 4, 'anno3_custom_background_V'); ?>
+                              <input type="button" value="OK" onclick="set_ac();">
+                           </td>
+                           </tr>
+                        <tr>
                         <?php if (file_exists("pilight_on")) pilight_controls(); ?>
                         <tr>
                            <td>Buffer (1000... ms), default 0:</td>
@@ -375,26 +502,6 @@
                            <td><select onchange="send_cmd('bo ' + this.value)"><?php makeOptions($options_bo, 'MP4Box'); ?></select></td>
                         </tr>
                         <tr>
-                           <td>Annotation size(0-99):</td>
-                           <td>
-                              <?php makeInput('anno_text_size', 3); ?><input type="button" value="OK" onclick="send_cmd('as ' + document.getElementById('anno_text_size').value)">
-                           </td>
-                        </tr>
-                        <tr>
-                           <td>Custom text color:</td>
-                           <td><select id="at_en"><?php makeOptions($options_at_en, 'anno3_custom_text_colour'); ?></select>
-                              y:u:v = <?php makeInput('at_y', 3, 'anno3_custom_text_Y'); ?>:<?php makeInput('at_u', 4, 'anno3_custom_text_U'); ?>:<?php makeInput('at_v', 4, 'anno3_custom_text_V'); ?>
-                              <input type="button" value="OK" onclick="set_at();">
-                           </td>
-                        </tr>
-                        <tr>
-                           <td>Custom background color:</td>
-                           <td><select id="ac_en"><?php makeOptions($options_ac_en, 'anno3_custom_background_colour'); ?></select>
-                              y:u:v = <?php makeInput('ac_y', 3, 'anno3_custom_background_Y'); ?>:<?php makeInput('ac_u', 4, 'anno3_custom_background_U'); ?>:<?php makeInput('ac_v', 4, 'anno3_custom_background_V'); ?>
-                              <input type="button" value="OK" onclick="set_ac();">
-                           </td>
-                           </tr>
-                        <tr>
                            <td>Watchdog, default interval 3s, errors 3</td>
                            <td>Interval <?php makeInput('watchdog_interval', 3); ?>s&nbsp;&nbsp;&nbsp;&nbsp;Errors <?php makeInput('watchdog_errors', 3); ?>
                            <input type="button" value="OK" onclick="send_cmd('wd ' + 10 * document.getElementById('watchdog_interval').value + ' ' + document.getElementById('watchdog_errors').value)">
@@ -404,11 +511,17 @@
                            <td>Motion detect mode :</td>
                            <td><select onchange="send_cmd('mx ' + this.value);setTimeout(function(){location.reload(true);}, 1000);"><?php makeOptions($options_mx, 'motion_external'); ?></select></td>
                         </tr>
+                        <tr>
+                           <td>Log size lines (default 5000):</td>
+                           <td>
+                              <?php makeInput('log_size', 6); ?><input type="button" value="OK" onclick="send_cmd('ls ' + document.getElementById('log_size').value)">
+                           </td>
+                        </tr>
                      </table>
                   </div>
                </div>
             </div>
-            <div class="panel panel-default" <?php  if($config['motion_external']) echo "style ='display:none;'"; ?>>
+            <div class="panel panel-default" <?php  if($config['motion_external'] == '1') echo "style ='display:none;'"; ?>>
                <div class="panel-heading">
                   <h2 class="panel-title">
                      <a data-toggle="collapse" data-parent="#accordion" href="#collapseTwo">Motion Settings</a>
@@ -476,9 +589,10 @@
                <div id="collapseThree" class="panel-collapse collapse">
                   <div class="panel-body">
                      <input id="toggle_stream" type="button" class="btn btn-primary" value="<?php echo $streamButton; ?>" onclick="set_stream_mode(this.value);">
+                     <input id="allow_simple" type="button" class="btn btn-primary" value="<?php echo $allowSimple; ?>" onclick="set_display(this.value);">
                      <input id="shutdown_button" type="button" value="shutdown system" onclick="sys_shutdown();" class="btn btn-danger">
                      <input id="reboot_button" type="button" value="reboot system" onclick="sys_reboot();" class="btn btn-danger">
-                     <input id="reset_button" type="button" value="reset settings" onclick="send_cmd('rs 1');setTimeout(function(){location.reload(true);}, 1000);" class="btn btn-danger">
+                     <input id="reset_button" type="button" value="reset settings" onclick="if(confirm('Are you sure?')) {send_cmd('rs 1');setTimeout(function(){location.reload(true);}, 1000);}" class="btn btn-danger">
                      <form action='<?php echo ROOT_PHP; ?>' method='POST'>
                         <br>Style
                         <select name='extrastyle' id='extrastyle'>
@@ -486,6 +600,9 @@
                         </select>
                         &nbsp;<button type="submit" name="OK" value="OK" >OK</button>
                      </form>
+					 <table class="settingsTable">
+						<?php macroUpdates(); ?>
+					 </table>
                   </div>
                </div>
             </div>
